@@ -66,9 +66,9 @@ struct NotchPeekPill: View {
             } else if contents == .percentage, showsCaption {
                 VStack(alignment: alignment == .leading ? .trailing : .leading, spacing: 1) {
                     if showSpinner {
-                        LoadingDot()
+                        LoadingDot(color: placeholderDotColor)
                     } else if showDash {
-                        Text("-%").font(Typography.bodyNumber).foregroundStyle(.white.opacity(0.40))
+                        Text("-%").font(Typography.bodyNumber).foregroundStyle(placeholderDashColor)
                     } else {
                         HStack(spacing: 4) {
                             percentLabel
@@ -81,11 +81,11 @@ struct NotchPeekPill: View {
                     }
                 }
             } else if showSpinner {
-                LoadingDot()
+                LoadingDot(color: contents == .reset ? .white.opacity(0.55) : placeholderDotColor)
             } else if showDash {
                 Text(contents == .reset ? "-" : "-%")
                     .font(Typography.bodyNumber)
-                    .foregroundStyle(.white.opacity(0.40))
+                    .foregroundStyle(contents == .reset ? .white.opacity(0.40) : placeholderDashColor)
             } else if contents == .reset {
                 resetLabel
             } else if contents == .percentage {
@@ -122,9 +122,9 @@ struct NotchPeekPill: View {
         VStack(alignment: alignment == .leading ? .trailing : .leading, spacing: 1) {
             HStack(spacing: 4) {
                 if showSpinner {
-                    LoadingDot()
+                    LoadingDot(color: placeholderDotColor)
                 } else if showDash {
-                    Text("-%").font(Typography.bodyNumber).foregroundStyle(.white.opacity(0.40))
+                    Text("-%").font(Typography.bodyNumber).foregroundStyle(placeholderDashColor)
                 } else {
                     if alignment == .leading, severity != .none { warningGlyph }
                     percentLabel
@@ -204,6 +204,16 @@ struct NotchPeekPill: View {
         }
     }
 
+    /// Loading and unavailable placeholders stay neutral, except under
+    /// `preservesBrandTint`, where the tint is the only provider cue.
+    private var placeholderDotColor: Color {
+        preservesBrandTint ? tint.opacity(0.70) : .white.opacity(0.55)
+    }
+
+    private var placeholderDashColor: Color {
+        preservesBrandTint ? tint.opacity(0.55) : .white.opacity(0.40)
+    }
+
     /// A measured zero stays visible during refresh, just like any other reading.
     private var showSpinner: Bool {
         loading && usage.isUnreported
@@ -240,11 +250,12 @@ struct NotchPeekPill: View {
 }
 
 private struct LoadingDot: View {
+    var color: Color = .white.opacity(0.55)
     @State private var pulsing = false
 
     var body: some View {
         Circle()
-            .fill(.white.opacity(0.55))
+            .fill(color)
             .frame(width: 6, height: 6)
             .opacity(pulsing ? 0.30 : 0.85)
             .onAppear {
