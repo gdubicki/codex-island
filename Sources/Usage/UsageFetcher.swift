@@ -7,10 +7,10 @@ enum UsageFetcher {
     /// the access_token from ~/.codex/auth.json. The endpoint is reliable
     /// and rarely rate-limited, so this is the easy half of the integration.
     static func fetchCodex(
-        credentialData: Data? = nil,
+        credentialData: @autoclosure () -> Data? = nil,
         send: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
     ) async -> AppUsage {
-        guard let authData = codexAuthData(credentialData),
+        guard let authData = codexAuthData(credentialData()),
               let req = codexRequest(path: "usage", authData: authData) else {
             return errorPair("no codex auth")
         }
@@ -18,6 +18,11 @@ enum UsageFetcher {
 
         do {
             let (data, response) = try await send(req)
+            // auth.json can switch accounts while the request is in flight;
+            // the response then describes the old account, not the current one.
+            if let current = codexAuthData(credentialData()), codexAccountID(authData: current) != accountID {
+                return errorPair("codex account changed", accountID: codexAccountID(authData: current), accountResolved: true)
+            }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
 
             // 401 means the access_token in ~/.codex/auth.json has expired.

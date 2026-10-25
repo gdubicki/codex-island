@@ -48,6 +48,14 @@ final class UsageHistoryStore: ObservableObject {
     /// Append the non-errored windows of a fresh fetch. Errored windows are
     /// skipped so a failed poll leaves a gap rather than a fabricated point.
     func record(provider: AlertEngine.Provider, usage: AppUsage, at: Date) {
+        let windows: [UsageWindow] = [.fiveHour, .weekly, .fableWeekly, .monthly]
+        // Another account's first recorded sample starts the provider's
+        // series over, so one account's readings never mix with another's.
+        if usage.accountResolved, let owner = owners[provider.rawValue],
+           owner != PeekWindowStore.scope(provider, usage: usage),
+           windows.contains(where: { Self.isRecordable(usage.window($0)) }) {
+            for window in windows { series[key(provider, window)] = nil }
+        }
         var changed = append(provider, .fiveHour, usage.fiveHour, at)
         changed = append(provider, .weekly, usage.weekly, at) || changed
         changed = append(provider, .fableWeekly, usage.fableWeekly, at) || changed
@@ -107,8 +115,12 @@ final class UsageHistoryStore: ObservableObject {
         append(key(provider, window), reading, at)
     }
 
+    private static func isRecordable(_ reading: WindowUsage) -> Bool {
+        reading.error == nil && reading.hasPercentageReading
+    }
+
     private func append(_ k: String, _ reading: WindowUsage, _ at: Date) -> Bool {
-        guard reading.error == nil, reading.hasPercentageReading else { return false }
+        guard Self.isRecordable(reading) else { return false }
         var arr = series[k] ?? []
         arr.append(UsageSample(at: at, used: max(0, min(1, reading.usedPercent))))
         let cutoff = at.addingTimeInterval(-Self.maxAge)

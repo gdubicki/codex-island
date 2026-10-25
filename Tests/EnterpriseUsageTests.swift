@@ -169,6 +169,16 @@ struct EnterpriseUsageTests {
         expect(zeroSeed.weekly.hasReading && zeroSeed.weekly.usedPercent == 0
                 && zeroSeed.peekWindowKind(preferring: .weekly) == .weekly,
                "a real zero history seed stays a reading and keeps the selected window")
+        UsageHistoryStore.shared.record(provider: .codex, usage: AppUsage(fiveHour: limited, weekly: .unknown,
+            reportedWindows: [.fiveHour], accountID: "acct-a"), at: Date())
+        UsageHistoryStore.shared.record(provider: .codex, usage: AppUsage(fiveHour: failure,
+            weekly: WindowUsage(usedPercent: 0.4, resetAt: nil, error: nil), accountID: "acct-b"), at: Date())
+        expect(UsageHistoryStore.shared.samples(provider: .codex, window: .fiveHour).isEmpty
+                && UsageHistoryStore.shared.samples(provider: .codex, window: .weekly).map(\.used) == [0.4],
+               "another account's first sample starts the provider's history over")
+        UsageHistoryStore.shared.record(provider: .codex, usage: AppUsage(fiveHour: failure, weekly: failure, accountID: "acct-c"), at: Date())
+        expect(UsageHistoryStore.shared.samples(provider: .codex, window: .weekly).count == 1,
+               "a failed poll for another account does not clear history")
 
         let reseeded = AlertDecision.evaluateCrossings(previous: [], inputs: [resetlessWeekly, monthly], warning: 80, critical: 95,
             warmedUp: true, reseedingWindows: [AlertDecision.WindowID(provider: .codex, windowKind: .weekly)])

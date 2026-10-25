@@ -122,6 +122,16 @@ struct CodexWindowRoutingTests {
         }
         expect(failedUsage.accountID == "selected-account" && !failedUsage.weekly.hasReading,
                "a failed fetchCodex still names the attempted account")
+        var currentAuth = auth
+        let switchedMidFlight = await UsageFetcher.fetchCodex(credentialData: currentAuth) { request in
+            currentAuth = switchedAuth
+            guard let url = request.url,
+                  let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+            else { throw URLError(.badURL) }
+            return (Data(weeklyOnlyResponse.utf8), response)
+        }
+        expect(switchedMidFlight.accountID == "other-account" && !switchedMidFlight.weekly.hasReading,
+               "a response for an account switched away mid-flight is not applied")
 
         var creditRequests: [URLRequest] = []
         let fetchedCredits = await UsageFetcher.fetchCodexResetCredits(credentialData: auth) { request in
