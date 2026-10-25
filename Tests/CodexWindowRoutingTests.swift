@@ -196,6 +196,16 @@ struct CodexWindowRoutingTests {
                     .peekWindowKind(preferring: .weekly) == .fiveHour,
             "single-window plans ignore the preference"
         )
+        expect(bothUsage.offersPeekWindowChoice, "two-window plans offer the peek window choice")
+        expect(
+            !AppUsage(fiveHour: failure, weekly: failure).offersPeekWindowChoice,
+            "a failed fetch before window discovery offers no peek window choice"
+        )
+        expect(
+            !weeklyOnlyUsage.offersPeekWindowChoice
+                && !AppUsage(fiveHour: failure, weekly: both.weekly).offersPeekWindowChoice,
+            "a plan without both rate windows offers no peek window choice"
+        )
 
         // MARK: shapes without limit_window_seconds fall back to slot order
 

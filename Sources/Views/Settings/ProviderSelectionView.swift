@@ -104,7 +104,7 @@ struct ProviderSelectionView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 28)
                 }
-                if value.visibleWindows.contains(.fiveHour), value.visibleWindows.contains(.weekly) {
+                if value.offersPeekWindowChoice {
                     Picker(L10n.tr("Peek and alerts"), selection: Binding(
                         get: { peekWindows.window(for: provider) },
                         set: { peekWindows.set($0, for: provider) }

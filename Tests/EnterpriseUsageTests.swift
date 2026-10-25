@@ -123,6 +123,24 @@ struct EnterpriseUsageTests {
         expect(AlertDecision.evaluateCrossings(previous: [], inputs: [noBoundary], warning: 80, critical: 95, warmedUp: false).pulse == nil,
                "startup warmup still suppresses monthly pulses")
 
+        let resetlessWeekly = AlertDecision.WindowInput(provider: .codex, visible: true,
+            window: WindowUsage(usedPercent: 0.85, resetAt: nil, error: nil), windowKind: .weekly)
+        let weeklyCrossing = AlertDecision.evaluateCrossings(previous: [], inputs: [resetlessWeekly], warning: 80, critical: 95, warmedUp: true)
+        expect(weeklyCrossing.pulse?.severity == .warning, "weekly threshold alerts without reset metadata")
+        expect(AlertDecision.evaluateCrossings(previous: weeklyCrossing.next, inputs: [resetlessWeekly], warning: 80, critical: 95, warmedUp: true).pulse == nil,
+               "boundaryless weekly alert fires once")
+        let lowWeekly = AlertDecision.WindowInput(provider: .codex, visible: true,
+            window: WindowUsage(usedPercent: 0.1, resetAt: nil, error: nil), windowKind: .weekly)
+        let weeklyRearmed = AlertDecision.evaluateCrossings(previous: weeklyCrossing.next, inputs: [lowWeekly], warning: 80, critical: 95, warmedUp: true)
+        expect(weeklyRearmed.next.isEmpty, "observed lower weekly usage rearms the next crossing")
+
+        let reseeded = AlertDecision.evaluateCrossings(previous: [], inputs: [resetlessWeekly, monthly], warning: 80, critical: 95,
+            warmedUp: true, reseedingWindows: [AlertDecision.WindowID(provider: .codex, windowKind: .weekly)])
+        expect(reseeded.next.contains { $0.provider == .codex && $0.windowKind == .weekly },
+               "switching the peek window seeds the new window's crossing memory")
+        expect(reseeded.pulse?.lines.map(\.provider) == [.claude],
+               "switching one provider's peek window does not swallow another window's crossing")
+
         let history = UsageHistoryStore.shared
         let key = "enterprise-test-\(UUID().uuidString)"
         history.record(key: key, window: unlimited, at: Date())

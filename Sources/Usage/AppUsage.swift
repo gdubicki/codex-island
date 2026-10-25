@@ -119,6 +119,15 @@ struct AppUsage {
         }
     }
 
+    /// Whether the user can choose which rate window the peek follows. A
+    /// failed fetch before window discovery leaves both windows visible as
+    /// errors, which says nothing about the plan, so it doesn't count.
+    var offersPeekWindowChoice: Bool {
+        [UsageWindow.fiveHour, .weekly].allSatisfy { kind in
+            reportedWindows?.contains(kind) ?? window(kind).hasReading
+        }
+    }
+
     func peekWindow(preferring preferred: UsageWindow) -> WindowUsage {
         window(peekWindowKind(preferring: preferred))
     }
