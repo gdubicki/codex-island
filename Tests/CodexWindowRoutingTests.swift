@@ -132,6 +132,26 @@ struct CodexWindowRoutingTests {
         }
         expect(switchedMidFlight.accountID == "other-account" && !switchedMidFlight.weekly.hasReading,
                "a response for an account switched away mid-flight is not applied")
+        func midFlight(from initial: Data, to replacement: Data?) async -> AppUsage {
+            var current: Data? = initial
+            return await UsageFetcher.fetchCodex(credentialData: current) { request in
+                current = replacement
+                guard let url = request.url,
+                      let response = HTTPURLResponse(url: url, statusCode: 200, httpVersion: nil, headerFields: nil)
+                else { throw URLError(.badURL) }
+                return (Data(weeklyOnlyResponse.utf8), response)
+            }
+        }
+        let unreadableMidFlight = await midFlight(from: auth, to: Data("not-json".utf8))
+        expect(!unreadableMidFlight.weekly.hasReading && !unreadableMidFlight.accountResolved,
+               "a response is not applied when the credential becomes unusable mid-flight")
+        let tokenOnlyOld = Data(#"{"tokens":{"access_token":"old-token"}}"#.utf8)
+        let tokenOnlyNew = Data(#"{"tokens":{"access_token":"new-token"}}"#.utf8)
+        let tokenOnlySwitched = await midFlight(from: tokenOnlyOld, to: tokenOnlyNew)
+        expect(!tokenOnlySwitched.weekly.hasReading && tokenOnlySwitched.accountResolved && tokenOnlySwitched.accountID == nil,
+               "a token-only credential replaced mid-flight does not apply the old token's response")
+        expect((await midFlight(from: tokenOnlyOld, to: tokenOnlyOld)).weekly.hasReading,
+               "an unchanged token-only credential still applies its response")
 
         var creditRequests: [URLRequest] = []
         let fetchedCredits = await UsageFetcher.fetchCodexResetCredits(credentialData: auth) { request in
@@ -240,6 +260,10 @@ struct CodexWindowRoutingTests {
         let switchedFailure = AppUsage.merged(fetched: failedForB, retaining: accountA, at: Date())
         expect(switchedFailure.accountID == "acct-b" && !switchedFailure.weekly.hasReading && !switchedFailure.fiveHour.hasReading,
                "a failed poll for another account does not relabel the prior account's readings")
+        expect(switchedFailure.visibleWindows.isEmpty,
+               "a failed poll for another account shows no undiscovered windows")
+        expect(AppUsage.merged(fetched: failedForB, retaining: switchedFailure, at: Date()).visibleWindows.isEmpty,
+               "repeated failures for the new account stay windowless until discovery")
         let failedTokenOnly = AppUsage(fiveHour: failure, weekly: failure, accountResolved: true)
         let tokenOnlySwitch = AppUsage.merged(fetched: failedTokenOnly, retaining: accountA, at: Date())
         expect(tokenOnlySwitch.accountID == nil && tokenOnlySwitch.accountResolved && !tokenOnlySwitch.weekly.hasReading,

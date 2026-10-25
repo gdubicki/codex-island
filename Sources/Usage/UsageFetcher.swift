@@ -18,10 +18,14 @@ enum UsageFetcher {
 
         do {
             let (data, response) = try await send(req)
-            // auth.json can switch accounts while the request is in flight;
-            // the response then describes the old account, not the current one.
-            if let current = codexAuthData(credentialData()), codexAccountID(authData: current) != accountID {
-                return errorPair("codex account changed", accountID: codexAccountID(authData: current), accountResolved: true)
+            // auth.json can change while the request is in flight; the
+            // response then describes the old credential, not the current one.
+            // A missing or unusable snapshot (e.g. mid-rewrite) is no credential.
+            guard let current = codexAuthData(credentialData()),
+                  codexRequest(path: "usage", authData: current) != nil else { return errorPair("no codex auth") }
+            if codexAccountID(authData: current) != accountID
+                || codexAccessToken(authData: current) != codexAccessToken(authData: authData) {
+                return errorPair("codex credentials changed", accountID: codexAccountID(authData: current), accountResolved: true)
             }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
 
@@ -73,6 +77,12 @@ enum UsageFetcher {
     private static func codexRequest(path: String, credentialData: Data?) -> URLRequest? {
         guard let data = codexAuthData(credentialData) else { return nil }
         return codexRequest(path: path, authData: data)
+    }
+
+    private static func codexAccessToken(authData: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: authData) as? [String: Any],
+              let tokens = json["tokens"] as? [String: Any] else { return nil }
+        return tokens["access_token"] as? String
     }
 
     static func codexAccountID(authData: Data) -> String? {

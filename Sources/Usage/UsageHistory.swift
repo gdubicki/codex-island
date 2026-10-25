@@ -35,14 +35,17 @@ final class UsageHistoryStore: ObservableObject {
     /// seed never paints one account's history under another account.
     private var owners: [String: String]
 
-    private init() {
-        if let data = UserDefaults.standard.data(forKey: Self.storageKey),
+    private let defaults: UserDefaults
+
+    init(defaults: UserDefaults = .standard) {
+        self.defaults = defaults
+        if let data = defaults.data(forKey: Self.storageKey),
            let decoded = try? JSONDecoder().decode([String: [UsageSample]].self, from: data) {
             series = decoded
         } else {
             series = [:]
         }
-        owners = UserDefaults.standard.dictionary(forKey: Self.ownersKey) as? [String: String] ?? [:]
+        owners = defaults.dictionary(forKey: Self.ownersKey) as? [String: String] ?? [:]
     }
 
     /// Append the non-errored windows of a fresh fetch. Errored windows are
@@ -51,8 +54,8 @@ final class UsageHistoryStore: ObservableObject {
         let windows: [UsageWindow] = [.fiveHour, .weekly, .fableWeekly, .monthly]
         // Another account's first recorded sample starts the provider's
         // series over, so one account's readings never mix with another's.
-        if usage.accountResolved, let owner = owners[provider.rawValue],
-           owner != PeekWindowStore.scope(provider, usage: usage),
+        // Ownerless history predates owners and could be any account's.
+        if usage.accountResolved, owners[provider.rawValue] != PeekWindowStore.scope(provider, usage: usage),
            windows.contains(where: { Self.isRecordable(usage.window($0)) }) {
             for window in windows { series[key(provider, window)] = nil }
         }
@@ -63,7 +66,7 @@ final class UsageHistoryStore: ObservableObject {
         if changed {
             if usage.accountResolved {
                 owners[provider.rawValue] = PeekWindowStore.scope(provider, usage: usage)
-                UserDefaults.standard.set(owners, forKey: Self.ownersKey)
+                defaults.set(owners, forKey: Self.ownersKey)
             }
             persist()
             revision &+= 1
@@ -78,11 +81,14 @@ final class UsageHistoryStore: ObservableObject {
 
     func samples(key: String) -> [UsageSample] { series[key] ?? [] }
 
-    /// False when the series was last recorded for a different account than
-    /// `usage` names. Unknown on either side (history from before owners
-    /// were kept, or usage whose account isn't resolved yet) is allowed.
+    /// False when the series was recorded for a different account than
+    /// `usage` names, or by an unknown one (history from before owners were
+    /// kept). Usage whose account isn't resolved yet is allowed.
     func belongs(provider: AlertEngine.Provider, to usage: AppUsage) -> Bool {
-        guard usage.accountResolved, let owner = owners[provider.rawValue] else { return true }
+        guard usage.accountResolved else { return true }
+        guard let owner = owners[provider.rawValue] else {
+            return [UsageWindow.fiveHour, .weekly, .fableWeekly, .monthly].allSatisfy { series[key(provider, $0)]?.isEmpty ?? true }
+        }
         return owner == PeekWindowStore.scope(provider, usage: usage)
     }
 
@@ -136,7 +142,7 @@ final class UsageHistoryStore: ObservableObject {
 
     private func persist() {
         if let data = try? JSONEncoder().encode(series) {
-            UserDefaults.standard.set(data, forKey: Self.storageKey)
+            defaults.set(data, forKey: Self.storageKey)
         }
     }
 }

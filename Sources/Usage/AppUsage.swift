@@ -179,8 +179,12 @@ struct AppUsage {
     static func merged(fetched: AppUsage, retaining prior: AppUsage, at now: Date) -> AppUsage {
         // A poll for a different account than the prior readings, including
         // one naming no account, must not relabel them as the new account's.
+        // A failure for it hasn't discovered its windows; show none rather
+        // than inventing tiles from the error pair.
         if fetched.accountResolved, prior.accountResolved, fetched.accountID != prior.accountID {
-            return fetched
+            var switched = fetched
+            if switched.reportedWindows == nil { switched.reportedWindows = [] }
+            return switched
         }
         return AppUsage(
             fiveHour: carryForward(fetched.fiveHour, prior: prior.fiveHour, at: now),

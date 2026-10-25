@@ -369,6 +369,19 @@ struct EnterpriseUsageTests {
             usage: connectedUsage, limit: duplicateID)
         expect(connectedCrossing(geminiCrossing.next, otherGroupInput).pulse != nil,
                "Quota groups with matching bucket IDs still alert independently")
+        let legacyDefaults = UserDefaults(suiteName: "enterprise-tests-\(UUID().uuidString)")!
+        let legacyReading = AppUsage(fiveHour: .unknown, weekly: WindowUsage(usedPercent: 0.4, resetAt: nil, error: nil))
+        let legacy = UsageHistoryStore(defaults: legacyDefaults)
+        legacy.record(provider: .codex, usage: legacyReading, at: Date())
+        let resolvedA = AppUsage(fiveHour: .unknown, weekly: .unknown, accountID: "acct-a")
+        expect(legacy.belongs(provider: .codex, to: .empty) && !legacy.belongs(provider: .codex, to: resolvedA),
+               "history from before owners were kept belongs to no resolved account")
+        legacy.record(provider: .codex, usage: AppUsage(fiveHour: .unknown,
+            weekly: WindowUsage(usedPercent: 0.6, resetAt: nil, error: nil), accountID: "acct-a"), at: Date())
+        expect(legacy.samples(provider: .codex, window: .weekly).map(\.used) == [0.6] && legacy.belongs(provider: .codex, to: resolvedA),
+               "the first resolved account's sample replaces ownerless history")
+        expect(UsageHistoryStore(defaults: legacyDefaults).belongs(provider: .codex, to: resolvedA),
+               "history ownership survives relaunch")
         if failures > 0 { exit(1) }
         print("PASS all Enterprise usage checks")
     }
