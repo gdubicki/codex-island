@@ -69,6 +69,7 @@ final class AlertEngine: ObservableObject {
     private var crossings: Set<CrossingKey> = []
     private var warmedUp = false
     private var museWarmedUp = false
+    private var reseedingScopes: Set<String> = []
     private var subs: Set<AnyCancellable> = []
 
     private init() {}
@@ -97,15 +98,18 @@ final class AlertEngine: ObservableObject {
             .store(in: &subs)
 
         // Switching which window the peek tracks is a display choice, not a
-        // new crossing. Re-seed crossing memory silently, as at startup, so
-        // a window that was already over threshold doesn't pulse.
+        // new crossing. Re-seed only the changed account's window silently,
+        // so it doesn't pulse for already being over threshold, while a
+        // genuine crossing elsewhere landing in the same pass still does.
         PeekWindowStore.shared.$windows
-            .dropFirst()
             .removeDuplicates()
+            .scan(([String: UsageWindow](), [String: UsageWindow]())) { ($0.1, $1) }
+            .dropFirst()
             .receive(on: DispatchQueue.main)
-            .sink { [weak self] _ in
+            .sink { [weak self] old, new in
+                let changed = Set(old.keys).union(new.keys).filter { old[$0] != new[$0] }
                 Task { @MainActor in
-                    self?.warmedUp = false
+                    self?.reseedingScopes.formUnion(changed)
                     self?.recompute()
                 }
             }
@@ -130,8 +134,8 @@ final class AlertEngine: ObservableObject {
             && AlertThresholdStore.criticalRange.contains(critical)
 
         let peekWindows = PeekWindowStore.shared
-        let claudePeekKind = usage.claude.peekWindowKind(preferring: peekWindows.window(for: .claude))
-        let codexPeekKind = usage.codex.peekWindowKind(preferring: peekWindows.window(for: .codex))
+        let claudePeekKind = usage.claude.peekWindowKind(preferring: peekWindows.window(for: .claude, usage: usage.claude))
+        let codexPeekKind = usage.codex.peekWindowKind(preferring: peekWindows.window(for: .codex, usage: usage.codex))
         let claudeKinds: [UsageWindow] = usage.claude.visibleWindows.contains(.monthly) && claudePeekKind != .monthly
             ? [claudePeekKind, .monthly] : [claudePeekKind]
         let inputs: [AlertDecision.WindowInput] = claudeKinds.map { kind in
@@ -146,7 +150,10 @@ final class AlertEngine: ObservableObject {
                 // peek choice. Severity must track the same number the peek
                 // pill and silhouette tint surface.
                 window: usage.codex.window(codexPeekKind),
-                windowKind: codexPeekKind
+                windowKind: codexPeekKind,
+                // Another account's reading must not rearm this account's
+                // resetless crossing, nor its memory suppress another's.
+                metricID: usage.codex.accountID.map { _ in PeekWindowStore.scope(.codex, usage: usage.codex) }
             ),
         ] + IslandProvider.allCases.filter { !$0.usesLegacyUsage }.map { provider in
             let limit = ProviderConnectionStore.shared.primary(provider)
@@ -180,6 +187,7 @@ final class AlertEngine: ObservableObject {
             crossings.removeAll()
             warmedUp = false
             museWarmedUp = false
+            reseedingScopes.removeAll()
             return
         }
 
@@ -196,8 +204,16 @@ final class AlertEngine: ObservableObject {
             warning: warning,
             critical: critical,
             warmedUp: warmedUp,
-            warmingProviders: museWarmedUp ? [] : [.muse]
+            warmingProviders: museWarmedUp ? [] : [.muse],
+            reseedingWindows: Set([
+                (provider: Provider.claude, usage: usage.claude, kind: claudePeekKind),
+                (provider: .codex, usage: usage.codex, kind: codexPeekKind),
+            ].compactMap { peek in
+                reseedingScopes.contains(PeekWindowStore.scope(peek.provider, usage: peek.usage))
+                    ? AlertDecision.WindowID(provider: peek.provider, windowKind: peek.kind) : nil
+            })
         )
+        reseedingScopes.removeAll()
         // Connected fetches finish independently of UsageStore.lastUpdated.
         // Only Muse's own usable reading can establish its startup baseline.
         if inputs.contains(where: { $0.provider == .muse && $0.visible && $0.window.hasPercentageReading }) {
@@ -261,7 +277,16 @@ enum AlertDecision {
                  metricID: limit.map { usage.historyKey(provider: provider, limit: $0) })
         }
 
-        var permitsResetlessCrossings: Bool { provider == .muse || windowKind == .monthly }
+        // A weekly window can arrive without reset metadata (Codex accepts
+        // a missing `reset_at`); without this its crossings could never fire.
+        var permitsResetlessCrossings: Bool { provider == .muse || windowKind == .weekly || windowKind == .monthly }
+
+        var id: WindowID { WindowID(provider: provider, windowKind: windowKind) }
+    }
+
+    struct WindowID: Hashable {
+        let provider: AlertEngine.Provider
+        let windowKind: UsageWindow
     }
 
     /// Returns severity per visible window whose percent meets at least the
@@ -308,7 +333,8 @@ enum AlertDecision {
         warning: Int,
         critical: Int,
         warmedUp: Bool,
-        warmingProviders: Set<AlertEngine.Provider> = []
+        warmingProviders: Set<AlertEngine.Provider> = [],
+        reseedingWindows: Set<WindowID> = []
     ) -> CrossingsEvalResult {
         var next = previous
 
@@ -370,7 +396,7 @@ enum AlertDecision {
             // Build pulse line per provider that crossed any threshold this
             // tick — coalesces both providers into a single event when both
             // happen on the same usage update.
-            if !warmingProviders.contains(input.provider),
+            if !warmingProviders.contains(input.provider), !reseedingWindows.contains(input.id),
                newCrossings.contains(where: { $0.provider == input.provider && $0.windowKind == input.windowKind
                    && $0.metricID == input.metricID }) {
                 let sev: AlertEngine.Severity = pct >= critical

@@ -123,6 +123,43 @@ struct EnterpriseUsageTests {
         expect(AlertDecision.evaluateCrossings(previous: [], inputs: [noBoundary], warning: 80, critical: 95, warmedUp: false).pulse == nil,
                "startup warmup still suppresses monthly pulses")
 
+        let resetlessWeekly = AlertDecision.WindowInput(provider: .codex, visible: true,
+            window: WindowUsage(usedPercent: 0.85, resetAt: nil, error: nil), windowKind: .weekly)
+        let weeklyCrossing = AlertDecision.evaluateCrossings(previous: [], inputs: [resetlessWeekly], warning: 80, critical: 95, warmedUp: true)
+        expect(weeklyCrossing.pulse?.severity == .warning, "weekly threshold alerts without reset metadata")
+        expect(AlertDecision.evaluateCrossings(previous: weeklyCrossing.next, inputs: [resetlessWeekly], warning: 80, critical: 95, warmedUp: true).pulse == nil,
+               "boundaryless weekly alert fires once")
+        let lowWeekly = AlertDecision.WindowInput(provider: .codex, visible: true,
+            window: WindowUsage(usedPercent: 0.1, resetAt: nil, error: nil), windowKind: .weekly)
+        let weeklyRearmed = AlertDecision.evaluateCrossings(previous: weeklyCrossing.next, inputs: [lowWeekly], warning: 80, critical: 95, warmedUp: true)
+        expect(weeklyRearmed.next.isEmpty, "observed lower weekly usage rearms the next crossing")
+
+        let accountA = AppUsage(fiveHour: .unknown, weekly: .unknown, accountID: "acct-a")
+        let accountB = AppUsage(fiveHour: .unknown, weekly: .unknown, accountID: "acct-b")
+        let scopeA = PeekWindowStore.scope(.codex, usage: accountA)
+        expect(scopeA != PeekWindowStore.scope(.codex, usage: accountB) && scopeA != PeekWindowStore.scope(.claude, usage: accountA),
+               "peek choices are scoped per provider account")
+        expect(PeekWindowStore.scope(.codex, usage: .empty) == "codex", "a credential without an account keeps the provider-wide choice")
+        func codexWeekly(_ fraction: Double, _ scope: String) -> AlertDecision.WindowInput {
+            AlertDecision.WindowInput(provider: .codex, visible: true,
+                window: WindowUsage(usedPercent: fraction, resetAt: nil, error: nil), windowKind: .weekly, metricID: scope)
+        }
+        let scopeB = PeekWindowStore.scope(.codex, usage: accountB)
+        let crossedA = AlertDecision.evaluateCrossings(previous: [], inputs: [codexWeekly(0.85, scopeA)], warning: 80, critical: 95, warmedUp: true)
+        let lowB = AlertDecision.evaluateCrossings(previous: crossedA.next, inputs: [codexWeekly(0.1, scopeB)], warning: 80, critical: 95, warmedUp: true)
+        let backToA = AlertDecision.evaluateCrossings(previous: lowB.next, inputs: [codexWeekly(0.85, scopeA)], warning: 80, critical: 95, warmedUp: true)
+        expect(crossedA.pulse != nil && backToA.pulse == nil,
+               "another account's low weekly reading cannot rearm a resetless crossing")
+        expect(AlertDecision.evaluateCrossings(previous: crossedA.next, inputs: [codexWeekly(0.85, scopeB)], warning: 80, critical: 95, warmedUp: true).pulse != nil,
+               "one account's crossing memory does not suppress another account's crossing")
+
+        let reseeded = AlertDecision.evaluateCrossings(previous: [], inputs: [resetlessWeekly, monthly], warning: 80, critical: 95,
+            warmedUp: true, reseedingWindows: [AlertDecision.WindowID(provider: .codex, windowKind: .weekly)])
+        expect(reseeded.next.contains { $0.provider == .codex && $0.windowKind == .weekly },
+               "switching the peek window seeds the new window's crossing memory")
+        expect(reseeded.pulse?.lines.map(\.provider) == [.claude],
+               "switching one provider's peek window does not swallow another window's crossing")
+
         let history = UsageHistoryStore.shared
         let fableReading = WindowUsage(usedPercent: 0.635, resetAt: Date().addingTimeInterval(86400), error: nil)
         let withFable = AppUsage(fiveHour: .unknown, weekly: .unknown, fableWeekly: fableReading,

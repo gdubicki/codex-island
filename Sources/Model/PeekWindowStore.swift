@@ -1,9 +1,11 @@
 import Foundation
+import CryptoKit
 
 /// Which rate window Claude and Codex show in the collapsed peek and track
 /// for approaching-limit alerts. Only matters when the plan reports both a
 /// 5-hour and a weekly window; single-window plans always use the one they
-/// have.
+/// have. Kept per account when the credential names one, so switching
+/// accounts restores that account's choice.
 @MainActor
 final class PeekWindowStore: ObservableObject {
     static let shared = PeekWindowStore()
@@ -12,28 +14,29 @@ final class PeekWindowStore: ObservableObject {
 
     private static let key = "MacIsland.peekWindows.v1"
 
-    @Published private(set) var windows: [IslandProvider: UsageWindow]
+    @Published private(set) var windows: [String: UsageWindow]
 
     private init() {
         let stored = UserDefaults.standard.dictionary(forKey: Self.key) as? [String: String] ?? [:]
-        var windows: [IslandProvider: UsageWindow] = [:]
-        for (rawProvider, rawWindow) in stored {
-            guard let provider = IslandProvider(rawValue: rawProvider),
-                  let window = UsageWindow(rawValue: rawWindow),
-                  Self.choices.contains(window) else { continue }
-            windows[provider] = window
+        windows = stored.compactMapValues { raw in
+            UsageWindow(rawValue: raw).flatMap { Self.choices.contains($0) ? $0 : nil }
         }
-        self.windows = windows
     }
 
-    func window(for provider: IslandProvider) -> UsageWindow {
-        windows[provider] ?? .fiveHour
+    /// Provider-wide when the credential names no account.
+    nonisolated static func scope(_ provider: IslandProvider, usage: AppUsage) -> String {
+        guard let accountID = usage.accountID else { return provider.rawValue }
+        let hash = SHA256.hash(data: Data(accountID.utf8)).map { String(format: "%02x", $0) }.joined()
+        return "\(provider.rawValue).\(hash)"
     }
 
-    func set(_ window: UsageWindow, for provider: IslandProvider) {
-        guard Self.choices.contains(window), window != self.window(for: provider) else { return }
-        windows[provider] = window
-        let stored = Dictionary(uniqueKeysWithValues: windows.map { ($0.key.rawValue, $0.value.rawValue) })
-        UserDefaults.standard.set(stored, forKey: Self.key)
+    func window(for provider: IslandProvider, usage: AppUsage) -> UsageWindow {
+        windows[Self.scope(provider, usage: usage)] ?? .fiveHour
+    }
+
+    func set(_ window: UsageWindow, for provider: IslandProvider, usage: AppUsage) {
+        guard Self.choices.contains(window), window != self.window(for: provider, usage: usage) else { return }
+        windows[Self.scope(provider, usage: usage)] = window
+        UserDefaults.standard.set(windows.mapValues(\.rawValue), forKey: Self.key)
     }
 }

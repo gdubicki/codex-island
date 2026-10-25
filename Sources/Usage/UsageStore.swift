@@ -285,7 +285,8 @@ final class UsageStore: ObservableObject {
             monthly: current.monthly,
             fableWeekly: fill(.fableWeekly, current.fableWeekly, prior?.fableWeekly),
             plan: current.plan,
-            reportedWindows: current.reportedWindows
+            reportedWindows: current.reportedWindows,
+            accountID: current.accountID
         )
     }
 
@@ -331,7 +332,8 @@ final class UsageStore: ObservableObject {
                 resetAt: weeklyReset,
                 error: nil
             ),
-            plan: codex.plan ?? "pro"
+            plan: codex.plan ?? "pro",
+            accountID: codex.accountID
         )
         self.lastUpdated = now
     }
