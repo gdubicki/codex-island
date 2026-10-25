@@ -140,6 +140,15 @@ struct EnterpriseUsageTests {
         expect(scopeA != PeekWindowStore.scope(.codex, usage: accountB) && scopeA != PeekWindowStore.scope(.claude, usage: accountA),
                "peek choices are scoped per provider account")
         expect(PeekWindowStore.scope(.codex, usage: .empty) == "codex", "a credential without an account keeps the provider-wide choice")
+        expect(!PeekWindowStore.scopeResolved(.codex, usage: .empty)
+                && PeekWindowStore.scopeResolved(.codex, usage: AppUsage(fiveHour: .unknown, weekly: .unknown, accountResolved: true))
+                && PeekWindowStore.scopeResolved(.claude, usage: .empty),
+               "the Codex choice waits for a resolved account, including a resolved token-only one")
+        let peekStore = PeekWindowStore.shared
+        let before = peekStore.window(for: .codex, usage: .empty)
+        peekStore.set(before == .weekly ? .fiveHour : .weekly, for: .codex, usage: .empty)
+        expect(peekStore.window(for: .codex, usage: .empty) == before,
+               "an unresolved Codex account cannot write the provider-wide choice")
         func codexWeekly(_ fraction: Double, _ scope: String) -> AlertDecision.WindowInput {
             AlertDecision.WindowInput(provider: .codex, visible: true,
                 window: WindowUsage(usedPercent: fraction, resetAt: nil, error: nil), windowKind: .weekly, metricID: scope)

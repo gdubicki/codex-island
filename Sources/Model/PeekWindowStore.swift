@@ -30,12 +30,19 @@ final class PeekWindowStore: ObservableObject {
         return "\(provider.rawValue).\(hash)"
     }
 
+    /// Whether `scope` is final. Codex names its account only once a fetch
+    /// reads the credential; until then a choice would land on the wrong key.
+    nonisolated static func scopeResolved(_ provider: IslandProvider, usage: AppUsage) -> Bool {
+        provider != .codex || usage.accountResolved
+    }
+
     func window(for provider: IslandProvider, usage: AppUsage) -> UsageWindow {
         windows[Self.scope(provider, usage: usage)] ?? .fiveHour
     }
 
     func set(_ window: UsageWindow, for provider: IslandProvider, usage: AppUsage) {
-        guard Self.choices.contains(window), window != self.window(for: provider, usage: usage) else { return }
+        guard Self.choices.contains(window), Self.scopeResolved(provider, usage: usage),
+              window != self.window(for: provider, usage: usage) else { return }
         windows[Self.scope(provider, usage: usage)] = window
         UserDefaults.standard.set(windows.mapValues(\.rawValue), forKey: Self.key)
     }

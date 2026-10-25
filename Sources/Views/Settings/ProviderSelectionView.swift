@@ -104,7 +104,7 @@ struct ProviderSelectionView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.leading, 28)
                 }
-                if value.offersPeekWindowChoice {
+                if value.offersPeekWindowChoice, PeekWindowStore.scopeResolved(provider, usage: value) {
                     Picker(L10n.tr("Peek and alerts"), selection: Binding(
                         get: { peekWindows.window(for: provider, usage: value) },
                         set: { peekWindows.set($0, for: provider, usage: value) }
