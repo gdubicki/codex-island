@@ -87,6 +87,8 @@ struct CodexWindowRoutingTests {
             let request = UsageFetcher.codexRequest(path: "usage", authData: Data(fixture.utf8))
             expect(request != nil && request?.value(forHTTPHeaderField: "ChatGPT-Account-Id") == nil,
                    "legacy credentials without an account retain token-only compatibility")
+            expect(UsageFetcher.codexAccountID(authData: Data(fixture.utf8)) == nil,
+                   "credentials without an account name no account")
         }
         for fixture in ["not-json", "{}", #"{"tokens":{"account_id":"selected-account"}}"#,
                         #"{"tokens":{"access_token":" "}}"#] {
@@ -111,6 +113,7 @@ struct CodexWindowRoutingTests {
                "fetchCodex sends the selected account header")
         expect(fetchedUsage.weekly.usedPercent == 0.40 && fetchedUsage.reportedWindows == [.weekly],
                "fetchCodex parses the mocked weekly quota")
+        expect(fetchedUsage.accountID == "selected-account", "fetchCodex tags the usage with the selected account")
 
         var creditRequests: [URLRequest] = []
         let fetchedCredits = await UsageFetcher.fetchCodexResetCredits(credentialData: auth) { request in
@@ -197,6 +200,15 @@ struct CodexWindowRoutingTests {
             "single-window plans ignore the preference"
         )
         expect(bothUsage.offersPeekWindowChoice, "two-window plans offer the peek window choice")
+
+        // MARK: the selected account travels with the readings
+
+        let accountA = AppUsage(fiveHour: both.fiveHour, weekly: both.weekly, reportedWindows: both.reported, accountID: "acct-a")
+        expect(AppUsage.merged(fetched: AppUsage(fiveHour: failure, weekly: failure), retaining: accountA, at: Date()).accountID == "acct-a",
+               "a failed fetch keeps the account of the readings it carries")
+        expect(AppUsage.merged(fetched: AppUsage(fiveHour: both.fiveHour, weekly: both.weekly, accountID: "acct-b"),
+                               retaining: accountA, at: Date()).accountID == "acct-b",
+               "a successful fetch for another account takes its identity")
         expect(
             !AppUsage(fiveHour: failure, weekly: failure).offersPeekWindowChoice,
             "a failed fetch before window discovery offers no peek window choice"

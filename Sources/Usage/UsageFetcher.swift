@@ -10,7 +10,8 @@ enum UsageFetcher {
         credentialData: Data? = nil,
         send: (URLRequest) async throws -> (Data, URLResponse) = { try await URLSession.shared.data(for: $0) }
     ) async -> AppUsage {
-        guard let req = codexRequest(path: "usage", credentialData: credentialData) else {
+        guard let authData = codexAuthData(credentialData),
+              let req = codexRequest(path: "usage", authData: authData) else {
             return errorPair("no codex auth")
         }
 
@@ -37,7 +38,8 @@ enum UsageFetcher {
                 fiveHour: windows.fiveHour,
                 weekly: windows.weekly,
                 plan: obj["plan_type"] as? String,
-                reportedWindows: windows.reported
+                reportedWindows: windows.reported,
+                accountID: codexAccountID(authData: authData)
             )
         } catch {
             return errorPair(error.localizedDescription)
@@ -53,10 +55,22 @@ enum UsageFetcher {
         )
     }
 
-    private static func codexRequest(path: String, credentialData: Data?) -> URLRequest? {
+    private static func codexAuthData(_ credentialData: Data?) -> Data? {
         let authPath = NSString("~/.codex/auth.json").expandingTildeInPath
-        guard let data = credentialData ?? (try? Data(contentsOf: URL(fileURLWithPath: authPath))) else { return nil }
+        return credentialData ?? (try? Data(contentsOf: URL(fileURLWithPath: authPath)))
+    }
+
+    private static func codexRequest(path: String, credentialData: Data?) -> URLRequest? {
+        guard let data = codexAuthData(credentialData) else { return nil }
         return codexRequest(path: path, authData: data)
+    }
+
+    static func codexAccountID(authData: Data) -> String? {
+        guard let json = try? JSONSerialization.jsonObject(with: authData) as? [String: Any],
+              let tokens = json["tokens"] as? [String: Any],
+              let accountID = tokens["account_id"] as? String,
+              !accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return nil }
+        return accountID
     }
 
     static func codexRequest(path: String, authData: Data) -> URLRequest? {
@@ -71,8 +85,7 @@ enum UsageFetcher {
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         // A token can cover multiple accounts; omitting the selected account
         // lets the backend return another account's quota and reset credits.
-        if let accountID = tokens["account_id"] as? String,
-           !accountID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        if let accountID = codexAccountID(authData: authData) {
             request.setValue(accountID, forHTTPHeaderField: "ChatGPT-Account-Id")
         }
         return request

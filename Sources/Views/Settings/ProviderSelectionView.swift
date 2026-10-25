@@ -106,8 +106,8 @@ struct ProviderSelectionView: View {
                 }
                 if value.offersPeekWindowChoice {
                     Picker(L10n.tr("Peek and alerts"), selection: Binding(
-                        get: { peekWindows.window(for: provider) },
-                        set: { peekWindows.set($0, for: provider) }
+                        get: { peekWindows.window(for: provider, usage: value) },
+                        set: { peekWindows.set($0, for: provider, usage: value) }
                     )) {
                         ForEach(PeekWindowStore.choices, id: \.self) { window in
                             Text(L10n.tr(window == .weekly ? "Weekly" : "5-hour")).tag(window)

@@ -94,17 +94,23 @@ struct AppUsage {
 
     // nil means no successful window discovery yet, not a two-window plan.
     var reportedWindows: [UsageWindow]?
+    /// The account the credential selects (Codex `tokens.account_id`), so
+    /// per-account preferences and alert memory don't bleed across
+    /// accounts. nil when the credential names none.
+    var accountID: String?
 
     init(fiveHour: WindowUsage, weekly: WindowUsage, monthly: WindowUsage = .unknown,
          fableWeekly: WindowUsage = .unknown,
          plan: String? = nil,
-         reportedWindows: [UsageWindow]? = nil) {
+         reportedWindows: [UsageWindow]? = nil,
+         accountID: String? = nil) {
         self.fiveHour = fiveHour
         self.weekly = weekly
         self.fableWeekly = fableWeekly
         self.monthly = monthly
         self.plan = plan
         self.reportedWindows = reportedWindows
+        self.accountID = accountID
     }
 
     static let empty = AppUsage(fiveHour: .unknown, weekly: .unknown)
@@ -172,7 +178,9 @@ struct AppUsage {
             // Plan tier is read from the credential store, not the usage
             // response, so a failed fetch shouldn't blank the chip's badge.
             plan: fetched.plan ?? prior.plan,
-            reportedWindows: fetched.reportedWindows ?? prior.reportedWindows
+            reportedWindows: fetched.reportedWindows ?? prior.reportedWindows,
+            // A failed fetch carries the prior readings, so it keeps their account.
+            accountID: fetched.accountID ?? prior.accountID
         )
     }
 

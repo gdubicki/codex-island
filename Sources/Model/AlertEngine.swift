@@ -69,7 +69,7 @@ final class AlertEngine: ObservableObject {
     private var crossings: Set<CrossingKey> = []
     private var warmedUp = false
     private var museWarmedUp = false
-    private var reseedingProviders: Set<Provider> = []
+    private var reseedingScopes: Set<String> = []
     private var subs: Set<AnyCancellable> = []
 
     private init() {}
@@ -98,18 +98,18 @@ final class AlertEngine: ObservableObject {
             .store(in: &subs)
 
         // Switching which window the peek tracks is a display choice, not a
-        // new crossing. Re-seed only the changed provider's window silently,
+        // new crossing. Re-seed only the changed account's window silently,
         // so it doesn't pulse for already being over threshold, while a
         // genuine crossing elsewhere landing in the same pass still does.
         PeekWindowStore.shared.$windows
             .removeDuplicates()
-            .scan(([IslandProvider: UsageWindow](), [IslandProvider: UsageWindow]())) { ($0.1, $1) }
+            .scan(([String: UsageWindow](), [String: UsageWindow]())) { ($0.1, $1) }
             .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] old, new in
                 let changed = Set(old.keys).union(new.keys).filter { old[$0] != new[$0] }
                 Task { @MainActor in
-                    self?.reseedingProviders.formUnion(changed)
+                    self?.reseedingScopes.formUnion(changed)
                     self?.recompute()
                 }
             }
@@ -134,8 +134,8 @@ final class AlertEngine: ObservableObject {
             && AlertThresholdStore.criticalRange.contains(critical)
 
         let peekWindows = PeekWindowStore.shared
-        let claudePeekKind = usage.claude.peekWindowKind(preferring: peekWindows.window(for: .claude))
-        let codexPeekKind = usage.codex.peekWindowKind(preferring: peekWindows.window(for: .codex))
+        let claudePeekKind = usage.claude.peekWindowKind(preferring: peekWindows.window(for: .claude, usage: usage.claude))
+        let codexPeekKind = usage.codex.peekWindowKind(preferring: peekWindows.window(for: .codex, usage: usage.codex))
         let claudeKinds: [UsageWindow] = usage.claude.visibleWindows.contains(.monthly) && claudePeekKind != .monthly
             ? [claudePeekKind, .monthly] : [claudePeekKind]
         let inputs: [AlertDecision.WindowInput] = claudeKinds.map { kind in
@@ -150,7 +150,10 @@ final class AlertEngine: ObservableObject {
                 // peek choice. Severity must track the same number the peek
                 // pill and silhouette tint surface.
                 window: usage.codex.window(codexPeekKind),
-                windowKind: codexPeekKind
+                windowKind: codexPeekKind,
+                // Another account's reading must not rearm this account's
+                // resetless crossing, nor its memory suppress another's.
+                metricID: usage.codex.accountID.map { _ in PeekWindowStore.scope(.codex, usage: usage.codex) }
             ),
         ] + IslandProvider.allCases.filter { !$0.usesLegacyUsage }.map { provider in
             let limit = ProviderConnectionStore.shared.primary(provider)
@@ -184,7 +187,7 @@ final class AlertEngine: ObservableObject {
             crossings.removeAll()
             warmedUp = false
             museWarmedUp = false
-            reseedingProviders.removeAll()
+            reseedingScopes.removeAll()
             return
         }
 
@@ -202,11 +205,15 @@ final class AlertEngine: ObservableObject {
             critical: critical,
             warmedUp: warmedUp,
             warmingProviders: museWarmedUp ? [] : [.muse],
-            reseedingWindows: Set(reseedingProviders.map { provider in
-                AlertDecision.WindowID(provider: provider, windowKind: provider == .claude ? claudePeekKind : codexPeekKind)
+            reseedingWindows: Set([
+                (provider: Provider.claude, usage: usage.claude, kind: claudePeekKind),
+                (provider: .codex, usage: usage.codex, kind: codexPeekKind),
+            ].compactMap { peek in
+                reseedingScopes.contains(PeekWindowStore.scope(peek.provider, usage: peek.usage))
+                    ? AlertDecision.WindowID(provider: peek.provider, windowKind: peek.kind) : nil
             })
         )
-        reseedingProviders.removeAll()
+        reseedingScopes.removeAll()
         // Connected fetches finish independently of UsageStore.lastUpdated.
         // Only Muse's own usable reading can establish its startup baseline.
         if inputs.contains(where: { $0.provider == .muse && $0.visible && $0.window.hasPercentageReading }) {
