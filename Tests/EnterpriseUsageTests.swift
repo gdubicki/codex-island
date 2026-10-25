@@ -153,6 +153,23 @@ struct EnterpriseUsageTests {
         expect(AlertDecision.evaluateCrossings(previous: crossedA.next, inputs: [codexWeekly(0.85, scopeB)], warning: 80, critical: 95, warmedUp: true).pulse != nil,
                "one account's crossing memory does not suppress another account's crossing")
 
+        let ownedByA = AppUsage(fiveHour: .unknown, weekly: WindowUsage(usedPercent: 0, resetAt: nil, error: nil),
+                                reportedWindows: [.weekly], accountID: "acct-a")
+        UsageHistoryStore.shared.record(provider: .codex, usage: ownedByA, at: Date())
+        expect(UsageHistoryStore.shared.belongs(provider: .codex, to: ownedByA) && UsageHistoryStore.shared.belongs(provider: .codex, to: .empty),
+               "history belongs to its recording account and to a not-yet-resolved one")
+        expect(!UsageHistoryStore.shared.belongs(provider: .codex, to: accountB)
+                && !UsageHistoryStore.shared.belongs(provider: .codex, to: AppUsage(fiveHour: .unknown, weekly: .unknown, accountResolved: true)),
+               "history does not belong to another account or a token-only credential")
+        let failedB = AppUsage(fiveHour: failure, weekly: failure, accountID: "acct-b")
+        expect(!UsageStore.seeded(failedB, provider: .codex, fillUnreported: true).weekly.hasReading,
+               "a failed poll for another account is not seeded with this account's history")
+        let zeroSeed = UsageStore.seeded(AppUsage(fiveHour: failure, weekly: failure, accountID: "acct-a"),
+                                         provider: .codex, fillUnreported: true)
+        expect(zeroSeed.weekly.hasReading && zeroSeed.weekly.usedPercent == 0
+                && zeroSeed.peekWindowKind(preferring: .weekly) == .weekly,
+               "a real zero history seed stays a reading and keeps the selected window")
+
         let reseeded = AlertDecision.evaluateCrossings(previous: [], inputs: [resetlessWeekly, monthly], warning: 80, critical: 95,
             warmedUp: true, reseedingWindows: [AlertDecision.WindowID(provider: .codex, windowKind: .weekly)])
         expect(reseeded.next.contains { $0.provider == .codex && $0.windowKind == .weekly },

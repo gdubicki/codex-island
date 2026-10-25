@@ -24,15 +24,15 @@ enum UsageFetcher {
             // The Codex CLI rotates this token on its own — there's nothing
             // we can do from here, so surface the exact remediation step.
             if status == 401 {
-                return errorPair("auth expired — codex login", accountID: accountID)
+                return errorPair("auth expired — codex login", accountID: accountID, accountResolved: true)
             }
             if status != 200 {
-                return errorPair("http \(status)", accountID: accountID)
+                return errorPair("http \(status)", accountID: accountID, accountResolved: true)
             }
 
             guard let obj = try JSONSerialization.jsonObject(with: data) as? [String: Any],
                   let rl = obj["rate_limit"] as? [String: Any] else {
-                return errorPair("parse error", accountID: accountID)
+                return errorPair("parse error", accountID: accountID, accountResolved: true)
             }
             let windows = routeCodexWindows(rl)
             return AppUsage(
@@ -40,20 +40,23 @@ enum UsageFetcher {
                 weekly: windows.weekly,
                 plan: obj["plan_type"] as? String,
                 reportedWindows: windows.reported,
-                accountID: accountID
+                accountID: accountID,
+                accountResolved: true
             )
         } catch {
-            return errorPair(error.localizedDescription, accountID: accountID)
+            return errorPair(error.localizedDescription, accountID: accountID, accountResolved: true)
         }
     }
 
-    private static func errorPair(_ message: String, accountID: String? = nil) -> AppUsage {
+    /// Pass `accountResolved` once a credential was read, even naming no account.
+    private static func errorPair(_ message: String, accountID: String? = nil, accountResolved: Bool = false) -> AppUsage {
         AppUsage(
             fiveHour: WindowUsage(usedPercent: 0, resetAt: nil, error: message),
             weekly: WindowUsage(usedPercent: 0, resetAt: nil, error: message),
             monthly: WindowUsage(usedPercent: 0, resetAt: nil, error: message),
             fableWeekly: WindowUsage(usedPercent: 0, resetAt: nil, error: message),
-            accountID: accountID
+            accountID: accountID,
+            accountResolved: accountResolved
         )
     }
 

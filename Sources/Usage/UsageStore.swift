@@ -179,8 +179,12 @@ final class UsageStore: ObservableObject {
             // same stale-but-true contract as the launch seed.
             if let c {
                 let priorCodex = self.codex
+                // Launch seeds don't know their account yet; drop them when
+                // history belongs to another account than this poll's.
+                let retained = priorCodex.accountResolved || UsageHistoryStore.shared.belongs(provider: .codex, to: c)
+                    ? priorCodex : .empty
                 self.codex = UsageStore.seeded(
-                    AppUsage.merged(fetched: c, retaining: priorCodex, at: now),
+                    AppUsage.merged(fetched: c, retaining: retained, at: now),
                     prior: priorCodex, provider: .codex, fillUnreported: false)
             }
             if let cl {
@@ -267,7 +271,8 @@ final class UsageStore: ObservableObject {
         func fill(_ kind: UsageWindow, _ existing: WindowUsage,
                   _ priorWindow: WindowUsage?) -> WindowUsage {
             if let reported = current.reportedWindows, !reported.contains(kind) { return .unknown }
-            guard !existing.hasReading else { return existing }
+            guard !existing.hasReading, UsageHistoryStore.shared.belongs(provider: provider, to: current)
+            else { return existing }
             if !fillUnreported {
                 if existing.isUnreported { return existing }
                 if let priorWindow, priorWindow.isUnreported { return existing }
@@ -277,7 +282,7 @@ final class UsageStore: ObservableObject {
             else { return existing }
             // No resetAt: the sample never carried one, and inventing a
             // countdown from a stored percentage would be a second fiction.
-            return WindowUsage(usedPercent: sample.used, resetAt: nil, error: existing.error)
+            return WindowUsage(usedPercent: sample.used, resetAt: nil, error: existing.error, retained: true)
         }
         return AppUsage(
             fiveHour: fill(.fiveHour, current.fiveHour, prior?.fiveHour),
@@ -286,7 +291,8 @@ final class UsageStore: ObservableObject {
             fableWeekly: fill(.fableWeekly, current.fableWeekly, prior?.fableWeekly),
             plan: current.plan,
             reportedWindows: current.reportedWindows,
-            accountID: current.accountID
+            accountID: current.accountID,
+            accountResolved: current.accountResolved
         )
     }
 
@@ -333,7 +339,8 @@ final class UsageStore: ObservableObject {
                 error: nil
             ),
             plan: codex.plan ?? "pro",
-            accountID: codex.accountID
+            accountID: codex.accountID,
+            accountResolved: codex.accountResolved
         )
         self.lastUpdated = now
     }

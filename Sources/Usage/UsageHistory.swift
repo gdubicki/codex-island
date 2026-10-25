@@ -28,8 +28,12 @@ final class UsageHistoryStore: ObservableObject {
     private static let maxAge: TimeInterval = 7 * 86400
     private static let maxSamples = 1000
     private static let storageKey = "CodexIsland.usageHistory.v1"
+    private static let ownersKey = "CodexIsland.usageHistoryOwners.v1"
 
     private var series: [String: [UsageSample]]
+    /// The account scope that last recorded each provider's series, so a
+    /// seed never paints one account's history under another account.
+    private var owners: [String: String]
 
     private init() {
         if let data = UserDefaults.standard.data(forKey: Self.storageKey),
@@ -38,6 +42,7 @@ final class UsageHistoryStore: ObservableObject {
         } else {
             series = [:]
         }
+        owners = UserDefaults.standard.dictionary(forKey: Self.ownersKey) as? [String: String] ?? [:]
     }
 
     /// Append the non-errored windows of a fresh fetch. Errored windows are
@@ -48,6 +53,10 @@ final class UsageHistoryStore: ObservableObject {
         changed = append(provider, .fableWeekly, usage.fableWeekly, at) || changed
         changed = append(provider, .monthly, usage.monthly, at) || changed
         if changed {
+            if usage.accountResolved {
+                owners[provider.rawValue] = PeekWindowStore.scope(provider, usage: usage)
+                UserDefaults.standard.set(owners, forKey: Self.ownersKey)
+            }
             persist()
             revision &+= 1
         }
@@ -60,6 +69,14 @@ final class UsageHistoryStore: ObservableObject {
     }
 
     func samples(key: String) -> [UsageSample] { series[key] ?? [] }
+
+    /// False when the series was last recorded for a different account than
+    /// `usage` names. Unknown on either side (history from before owners
+    /// were kept, or usage whose account isn't resolved yet) is allowed.
+    func belongs(provider: AlertEngine.Provider, to usage: AppUsage) -> Bool {
+        guard usage.accountResolved, let owner = owners[provider.rawValue] else { return true }
+        return owner == PeekWindowStore.scope(provider, usage: usage)
+    }
 
     func record(key: String, window: WindowUsage, at: Date) {
         guard append(key, window, at) else { return }

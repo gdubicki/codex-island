@@ -101,12 +101,15 @@ struct AppUsage {
     /// per-account preferences and alert memory don't bleed across
     /// accounts. nil when the credential names none.
     var accountID: String?
+    /// Whether `accountID` comes from the credential behind these readings,
+    /// so a nil one means "names no account" rather than "not known yet".
+    var accountResolved: Bool
 
     init(fiveHour: WindowUsage, weekly: WindowUsage, monthly: WindowUsage = .unknown,
          fableWeekly: WindowUsage = .unknown,
          plan: String? = nil,
          reportedWindows: [UsageWindow]? = nil,
-         accountID: String? = nil) {
+         accountID: String? = nil, accountResolved: Bool? = nil) {
         self.fiveHour = fiveHour
         self.weekly = weekly
         self.fableWeekly = fableWeekly
@@ -114,6 +117,7 @@ struct AppUsage {
         self.plan = plan
         self.reportedWindows = reportedWindows
         self.accountID = accountID
+        self.accountResolved = accountResolved ?? (accountID != nil)
     }
 
     static let empty = AppUsage(fiveHour: .unknown, weekly: .unknown)
@@ -173,9 +177,9 @@ struct AppUsage {
     /// token can never refresh those numbers again) skip this and assign the
     /// fetched value directly — see `UsageStore.refresh`.
     static func merged(fetched: AppUsage, retaining prior: AppUsage, at now: Date) -> AppUsage {
-        // A failed poll for a different account than the prior readings must
-        // not relabel them as the new account's.
-        if let account = fetched.accountID, let priorAccount = prior.accountID, account != priorAccount {
+        // A poll for a different account than the prior readings, including
+        // one naming no account, must not relabel them as the new account's.
+        if fetched.accountResolved, prior.accountResolved, fetched.accountID != prior.accountID {
             return fetched
         }
         return AppUsage(
@@ -187,9 +191,8 @@ struct AppUsage {
             // response, so a failed fetch shouldn't blank the chip's badge.
             plan: fetched.plan ?? prior.plan,
             reportedWindows: fetched.reportedWindows ?? prior.reportedWindows,
-            // A failed fetch names the account it attempted, else keeps the
-            // carried readings' one. A successful fetch names its own, even none.
-            accountID: fetched.reportedWindows == nil ? fetched.accountID ?? prior.accountID : fetched.accountID
+            accountID: fetched.accountResolved ? fetched.accountID : prior.accountID,
+            accountResolved: fetched.accountResolved || prior.accountResolved
         )
     }
 

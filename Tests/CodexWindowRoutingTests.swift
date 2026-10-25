@@ -217,7 +217,8 @@ struct CodexWindowRoutingTests {
         expect(AppUsage.merged(fetched: AppUsage(fiveHour: both.fiveHour, weekly: both.weekly, accountID: "acct-b"),
                                retaining: accountA, at: Date()).accountID == "acct-b",
                "a successful fetch for another account takes its identity")
-        expect(AppUsage.merged(fetched: AppUsage(fiveHour: both.fiveHour, weekly: both.weekly, reportedWindows: both.reported),
+        expect(AppUsage.merged(fetched: AppUsage(fiveHour: both.fiveHour, weekly: both.weekly, reportedWindows: both.reported,
+                                                 accountResolved: true),
                                retaining: accountA, at: Date()).accountID == nil,
                "a successful fetch naming no account clears the prior account")
         let failedForA = AppUsage(fiveHour: failure, weekly: failure, accountID: "acct-a")
@@ -229,6 +230,12 @@ struct CodexWindowRoutingTests {
         let switchedFailure = AppUsage.merged(fetched: failedForB, retaining: accountA, at: Date())
         expect(switchedFailure.accountID == "acct-b" && !switchedFailure.weekly.hasReading && !switchedFailure.fiveHour.hasReading,
                "a failed poll for another account does not relabel the prior account's readings")
+        let failedTokenOnly = AppUsage(fiveHour: failure, weekly: failure, accountResolved: true)
+        let tokenOnlySwitch = AppUsage.merged(fetched: failedTokenOnly, retaining: accountA, at: Date())
+        expect(tokenOnlySwitch.accountID == nil && tokenOnlySwitch.accountResolved && !tokenOnlySwitch.weekly.hasReading,
+               "a failed poll with a token-only credential drops the prior account and its readings")
+        expect(AppUsage.merged(fetched: AppUsage(fiveHour: failure, weekly: failure), retaining: tokenOnlySwitch, at: Date()).accountResolved,
+               "an unresolved failure keeps the resolved provider-wide scope")
 
         let zeroSelected = AppUsage(fiveHour: WindowUsage(usedPercent: 0.9, resetAt: nil, error: nil),
                                     weekly: WindowUsage(usedPercent: 0, resetAt: nil, error: nil),
