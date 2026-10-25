@@ -173,7 +173,12 @@ struct AppUsage {
     /// token can never refresh those numbers again) skip this and assign the
     /// fetched value directly — see `UsageStore.refresh`.
     static func merged(fetched: AppUsage, retaining prior: AppUsage, at now: Date) -> AppUsage {
-        AppUsage(
+        // A failed poll for a different account than the prior readings must
+        // not relabel them as the new account's.
+        if let account = fetched.accountID, let priorAccount = prior.accountID, account != priorAccount {
+            return fetched
+        }
+        return AppUsage(
             fiveHour: carryForward(fetched.fiveHour, prior: prior.fiveHour, at: now),
             weekly: carryForward(fetched.weekly, prior: prior.weekly, at: now),
             monthly: carryForward(fetched.monthly, prior: prior.monthly, at: now),
@@ -182,8 +187,8 @@ struct AppUsage {
             // response, so a failed fetch shouldn't blank the chip's badge.
             plan: fetched.plan ?? prior.plan,
             reportedWindows: fetched.reportedWindows ?? prior.reportedWindows,
-            // A failed fetch carries the prior readings, so it keeps their
-            // account. A successful one names its own, even when that's none.
+            // A failed fetch names the account it attempted, else keeps the
+            // carried readings' one. A successful fetch names its own, even none.
             accountID: fetched.reportedWindows == nil ? fetched.accountID ?? prior.accountID : fetched.accountID
         )
     }

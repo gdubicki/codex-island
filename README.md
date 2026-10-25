@@ -78,7 +78,8 @@ for authentication details and data limitations.
 - **Used or remaining quota.** Display provider windows as usage consumed or
   quota remaining.
 - **Approaching-limit alerts.** Optional warning and critical thresholds tint
-  the island and pulse the peek pill as the peeked window nears its limit.
+  the island and pulse the peek pill as the peeked window, or Claude
+  Enterprise monthly credits, near their limit.
 - **Codex reset credits.** When reset credits are available, the Usage footer
   shows their count and expiration details.
 - **Configurable token counting.** The TOKENS hero can sum every token type

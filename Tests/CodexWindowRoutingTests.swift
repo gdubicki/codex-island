@@ -114,6 +114,14 @@ struct CodexWindowRoutingTests {
         expect(fetchedUsage.weekly.usedPercent == 0.40 && fetchedUsage.reportedWindows == [.weekly],
                "fetchCodex parses the mocked weekly quota")
         expect(fetchedUsage.accountID == "selected-account", "fetchCodex tags the usage with the selected account")
+        let failedUsage = await UsageFetcher.fetchCodex(credentialData: auth) { request in
+            guard let url = request.url,
+                  let response = HTTPURLResponse(url: url, statusCode: 500, httpVersion: nil, headerFields: nil)
+            else { throw URLError(.badURL) }
+            return (Data(), response)
+        }
+        expect(failedUsage.accountID == "selected-account" && !failedUsage.weekly.hasReading,
+               "a failed fetchCodex still names the attempted account")
 
         var creditRequests: [URLRequest] = []
         let fetchedCredits = await UsageFetcher.fetchCodexResetCredits(credentialData: auth) { request in
@@ -212,6 +220,15 @@ struct CodexWindowRoutingTests {
         expect(AppUsage.merged(fetched: AppUsage(fiveHour: both.fiveHour, weekly: both.weekly, reportedWindows: both.reported),
                                retaining: accountA, at: Date()).accountID == nil,
                "a successful fetch naming no account clears the prior account")
+        let failedForA = AppUsage(fiveHour: failure, weekly: failure, accountID: "acct-a")
+        let coldFailure = AppUsage.merged(fetched: failedForA, retaining: AppUsage(fiveHour: both.fiveHour, weekly: both.weekly),
+                                           at: Date(timeIntervalSince1970: 1_780_000_000))
+        expect(coldFailure.accountID == "acct-a" && coldFailure.weekly.hasReading,
+               "a failed first poll scopes seeded readings to the attempted account")
+        let failedForB = AppUsage(fiveHour: failure, weekly: failure, accountID: "acct-b")
+        let switchedFailure = AppUsage.merged(fetched: failedForB, retaining: accountA, at: Date())
+        expect(switchedFailure.accountID == "acct-b" && !switchedFailure.weekly.hasReading && !switchedFailure.fiveHour.hasReading,
+               "a failed poll for another account does not relabel the prior account's readings")
 
         let zeroSelected = AppUsage(fiveHour: WindowUsage(usedPercent: 0.9, resetAt: nil, error: nil),
                                     weekly: WindowUsage(usedPercent: 0, resetAt: nil, error: nil),
