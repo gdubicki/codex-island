@@ -18,6 +18,15 @@ failed refreshes, so an offline request cannot bring back a removed 5h tile.
 Zero-percent windows remain visible. Peek and alerts select the same available
 window, and chart styles and history keys remain unchanged.
 
+## Claude Fable weekly limit
+
+When Claude reports a Fable `weekly_scoped` entry in `limits[]`, the Usage page
+shows a separate Fable quota alongside 5h and week in every chart style. Its
+percentage, reset countdown, and history stay separate from account-wide weekly
+usage. The legacy `seven_day_overage_included` window is also supported.
+Missing or incomplete Fable readings do not create a zero-percent quota based on
+the plan name. Failed refreshes retain the last reading until its reset boundary.
+
 ## Claude Enterprise credits
 
 Enterprise accounts can report monthly `extra_usage` credits alongside or instead
@@ -73,14 +82,24 @@ These model-list commands run without a prompt, with closed stdin and a 25-secon
 timeout; they do not start an agent turn. Failed renewal is reported as a connection
 error, and HTTP 403 is not treated as proof of logout. It resolves the signed-in account's project via
 `loadCodeAssist`, then passes that project to `retrieveUserQuotaSummary`.
+Both requests use the CLI's `daily-cloudcode-pa.googleapis.com` backend and
+versioned CLI client profile (`User-Agent: antigravity/cli/1.4.2`). The backend
+can return only Claude/GPT buckets for a desktop-style or unversioned profile,
+even when the same account has Gemini and Argon quotas in `agy /usage`.
 The account project isolates display preferences and quota history. A Gemini API
 key alone is not treated as an Antigravity subscription login.
 
-Gemini is the preferred default group when present; otherwise an available group
-is selected deterministically. Reported five-hour and weekly windows take
+The standard Gemini Models group is preferred over separate Gemini model groups
+such as Gemini 4 Argon when present; otherwise an available Gemini group or
+another group is selected deterministically. Reported five-hour and weekly windows take
 precedence. Settings can select another model group, one or two metrics, their
 order, and which displayed metric drives peek and alerts. Use defaults restores
 the automatic selection. No five-hour window is invented for a weekly-only plan.
+On paid Pro accounts, the backend can report Argon as a separate weekly-only
+group. Preserve that group's bucket identity and reset time; do not infer an
+Argon group for accounts whose response includes it in the larger Gemini bucket.
+Alert crossing memory uses the selected account, model group, and bucket identity,
+so switching groups cannot suppress another bucket's alert or repeat an old one.
 
 Preferences use account identity when supplied by the provider. Quota history
 is stored under hashed account and metric identifiers; an unidentified session

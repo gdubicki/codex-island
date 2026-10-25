@@ -558,7 +558,7 @@ private struct PeekPillOverlay: View {
     }
 
     private var currentWindowIsWeekly: Bool {
-        currentWindowKind == .weekly
+        currentWindowKind == .weekly || currentWindowKind == .fableWeekly
     }
 
     private var currentWindowIsMonthly: Bool {
@@ -590,7 +590,9 @@ private struct PeekPillOverlay: View {
     }
 
     private var tint: Color { provider.color }
-    private var providerLabel: String { provider.name }
+    private var providerLabel: String {
+        currentWindowKind == .fableWeekly ? "\(provider.name) Fable" : provider.name
+    }
 
     private func peekLabel(for window: WindowUsage, provider: String, weekly: Bool,
                            monthly: Bool) -> String {
