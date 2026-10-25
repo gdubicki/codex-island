@@ -114,7 +114,8 @@ struct IslandRootView: View {
                             slotWidth: model.state == .peek ? model.pillSlotWidth - 14 : 0,
                             availableHeight: model.notch.height,
                             showsCaption: model.notch.height >= 32,
-                            revealProgress: model.state == .peek ? 1 : 0)
+                            revealProgress: model.state == .peek ? 1 : 0,
+                            preservesBrandTint: !model.logosVisible)
                     }
                 }
                 .overlay(alignment: .topTrailing) {
@@ -123,7 +124,8 @@ struct IslandRootView: View {
                             topPadding: 0, pillsVisible: true, contents: .stacked, edgePadding: 9,
                             slotWidth: model.state == .peek ? model.pillSlotWidth - 14 : 0,
                             availableHeight: model.notch.height,
-                            revealProgress: model.state == .peek ? 1 : 0)
+                            revealProgress: model.state == .peek ? 1 : 0,
+                            preservesBrandTint: !model.logosVisible)
                     } else if model.state != .expanded, !model.logosVisible {
                         // Without the logo tab there is no room for the
                         // unrolling gauge, so a single provider shows its
@@ -134,7 +136,8 @@ struct IslandRootView: View {
                             slotWidth: model.state == .peek ? model.pillSlotWidth - 14 : 0,
                             availableHeight: model.notch.height,
                             showsCaption: model.notch.height >= 32,
-                            revealProgress: model.state == .peek ? 1 : 0)
+                            revealProgress: model.state == .peek ? 1 : 0,
+                            preservesBrandTint: true)
                     }
                 }
                 .contentShape(IslandShape())
@@ -483,6 +486,7 @@ private struct PeekPillOverlay: View {
     var gaugeProgress: CGFloat = 0
     var showsCaption = false
     var revealProgress: CGFloat = 1
+    var preservesBrandTint = false
 
     @ObservedObject private var visibility = ProviderVisibilityStore.shared
     @ObservedObject private var connections = ProviderConnectionStore.shared
@@ -504,7 +508,8 @@ private struct PeekPillOverlay: View {
             gaugeProgress: gaugeProgress,
             gaugeHeight: availableHeight ?? 38,
             showsCaption: showsCaption,
-            valueWidth: slotWidth
+            valueWidth: slotWidth,
+            preservesBrandTint: preservesBrandTint
         )
         Group {
             if contents == .reset || contents == .stacked || contents == .percentage {

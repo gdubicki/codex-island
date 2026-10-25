@@ -67,6 +67,8 @@
 "Idle" = "Idle";
 "Logos" = "Logos";
 "Provider logos" = "Provider logos";
+"On" = "On";
+"Off" = "Off";
 "idle" = "idle";
 "Input + output" = "Input + output";
 "Input + output only. Matches Anthropic's claude.ai stats." = "Input + output only. Matches Anthropic's claude.ai stats.";

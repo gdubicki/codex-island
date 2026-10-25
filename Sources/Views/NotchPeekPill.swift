@@ -31,6 +31,10 @@ struct NotchPeekPill: View {
     var gaugeHeight: CGFloat = 38
     var showsCaption = false
     var valueWidth: CGFloat? = nil
+    /// Keeps the value in the provider's brand tint even above an alert
+    /// threshold. Used when the logos are hidden, where the tint is the
+    /// only provider cue; the warning glyph still carries the severity.
+    var preservesBrandTint = false
     @ObservedObject private var usageDisplay = UsageDisplayModeStore.shared
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -156,14 +160,15 @@ struct NotchPeekPill: View {
     private var warningGlyph: some View {
         Text("⚠")
             .font(Typography.bodyNumber)
-            .foregroundStyle(effectiveTint)
+            .foregroundStyle(severityTint)
     }
 
     private var percentLabel: some View {
         Text(percentText)
             .font(Typography.bodyNumber)
             .minimumScaleFactor(0.5)
-            .frame(width: contents == .stacked && usage.isUnlimitedAmount ? valueWidth : nil,
+            .frame(width: (contents == .stacked || contents == .percentage) && usage.isUnlimitedAmount
+                       ? valueWidth : nil,
                    alignment: alignment == .leading ? .trailing : .leading)
             .foregroundStyle(effectiveTint)
             .help(usage.isUnlimitedAmount ? usage.amountCaption ?? "" : "")
@@ -185,8 +190,13 @@ struct NotchPeekPill: View {
     }
 
     /// Brand tint by default; alert color when above threshold so the
-    /// percent + warning glyph share a consistent severity color.
+    /// percent + warning glyph share a consistent severity color, unless
+    /// `preservesBrandTint` keeps the value identifying its provider.
     private var effectiveTint: Color {
+        preservesBrandTint ? tint : severityTint
+    }
+
+    private var severityTint: Color {
         switch severity {
         case .none:     return tint
         case .warning:  return IslandColor.alertAmber

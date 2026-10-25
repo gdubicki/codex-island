@@ -67,6 +67,8 @@
 "Idle" = "空闲";
 "Logos" = "图标";
 "Provider logos" = "服务图标";
+"On" = "开";
+"Off" = "关";
 "idle" = "空闲";
 "Input + output" = "输入 + 输出";
 "Input + output only. Matches Anthropic's claude.ai stats." = "只统计输入 + 输出；与 Anthropic 的 claude.ai 统计一致。";
