@@ -209,6 +209,19 @@ struct CodexWindowRoutingTests {
         expect(AppUsage.merged(fetched: AppUsage(fiveHour: both.fiveHour, weekly: both.weekly, accountID: "acct-b"),
                                retaining: accountA, at: Date()).accountID == "acct-b",
                "a successful fetch for another account takes its identity")
+        expect(AppUsage.merged(fetched: AppUsage(fiveHour: both.fiveHour, weekly: both.weekly, reportedWindows: both.reported),
+                               retaining: accountA, at: Date()).accountID == nil,
+               "a successful fetch naming no account clears the prior account")
+
+        let zeroSelected = AppUsage(fiveHour: WindowUsage(usedPercent: 0.9, resetAt: nil, error: nil),
+                                    weekly: WindowUsage(usedPercent: 0, resetAt: nil, error: nil),
+                                    reportedWindows: both.reported)
+        let zeroCarried = AppUsage.merged(fetched: AppUsage(fiveHour: failure, weekly: failure), retaining: zeroSelected, at: Date())
+        expect(zeroCarried.weekly.hasReading && zeroCarried.peekWindowKind(preferring: .weekly) == .weekly,
+               "a carried real zero keeps the selected window across a failed poll")
+        expect(AppUsage.merged(fetched: AppUsage(fiveHour: failure, weekly: failure), retaining: zeroCarried, at: Date())
+                .peekWindowKind(preferring: .weekly) == .weekly,
+               "repeated failures keep carrying the selected zero")
         expect(
             !AppUsage(fiveHour: failure, weekly: failure).offersPeekWindowChoice,
             "a failed fetch before window discovery offers no peek window choice"

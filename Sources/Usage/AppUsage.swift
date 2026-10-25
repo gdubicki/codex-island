@@ -28,15 +28,19 @@ struct WindowUsage {
     let usedAmount: Double?
     let limitAmount: Double?
     let currencyCode: String?
+    /// A real prior reading carried past a failed poll by `AppUsage.merged`.
+    let retained: Bool
 
     init(usedPercent: Double, resetAt: Date?, error: String?,
-         usedAmount: Double? = nil, limitAmount: Double? = nil, currencyCode: String? = nil) {
+         usedAmount: Double? = nil, limitAmount: Double? = nil, currencyCode: String? = nil,
+         retained: Bool = false) {
         self.usedPercent = usedPercent
         self.resetAt = resetAt
         self.error = error
         self.usedAmount = usedAmount
         self.limitAmount = limitAmount
         self.currencyCode = currencyCode
+        self.retained = retained
     }
 
     static let unknown = WindowUsage(usedPercent: 0, resetAt: nil, error: "no data")
@@ -50,10 +54,9 @@ struct WindowUsage {
     /// window we know nothing about. Every consumer that displays or alerts
     /// on a percentage must gate on this first.
     ///
-    /// An error alongside a *non-zero* percentage is the carry-forward shape
-    /// from `AppUsage.merged`: a real prior reading with a fresh failure
-    /// attached. That still counts as a reading.
-    var hasReading: Bool { !(error != nil && usedPercent == 0 && usedAmount == nil) }
+    /// A carried-forward reading from `AppUsage.merged` (a real prior reading
+    /// with a fresh failure attached) still counts, including a real zero.
+    var hasReading: Bool { retained || !(error != nil && usedPercent == 0 && usedAmount == nil) }
 
     var hasPercentageReading: Bool { hasReading && !(usedAmount != nil && limitAmount == nil) }
     var isUnlimitedAmount: Bool { usedAmount != nil && limitAmount == nil }
@@ -179,8 +182,9 @@ struct AppUsage {
             // response, so a failed fetch shouldn't blank the chip's badge.
             plan: fetched.plan ?? prior.plan,
             reportedWindows: fetched.reportedWindows ?? prior.reportedWindows,
-            // A failed fetch carries the prior readings, so it keeps their account.
-            accountID: fetched.accountID ?? prior.accountID
+            // A failed fetch carries the prior readings, so it keeps their
+            // account. A successful one names its own, even when that's none.
+            accountID: fetched.reportedWindows == nil ? fetched.accountID ?? prior.accountID : fetched.accountID
         )
     }
 
@@ -198,7 +202,7 @@ struct AppUsage {
         return WindowUsage(
             usedPercent: prior.usedPercent, resetAt: prior.resetAt, error: fetched.error,
             usedAmount: prior.usedAmount, limitAmount: prior.limitAmount,
-            currencyCode: prior.currencyCode
+            currencyCode: prior.currencyCode, retained: true
         )
     }
 
