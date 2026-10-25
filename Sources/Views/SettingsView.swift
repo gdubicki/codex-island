@@ -28,6 +28,10 @@ struct SettingsView: View {
 
     @AppStorage("Settings.activeTab") private var activeTabRaw: String = SettingsTab.general.rawValue
     @State private var recoveryPresented = false
+    /// Bumped on display attach/detach. `DisplayInfo` reads `NSScreen`
+    /// directly, which SwiftUI can't observe, so the Display tab reads this
+    /// to re-resolve the target with the window controller.
+    @State private var screenConfigurationRevision = 0
 
     private var activeTab: SettingsTab {
         get { SettingsTab(rawValue: activeTabRaw) ?? .general }
@@ -77,6 +81,11 @@ struct SettingsView: View {
                 CostStore.shared.refresh()
                 NotificationCenter.default.post(name: .codexIslandUsageHistoryRecovered, object: nil)
             }))
+        }
+        .onReceive(NotificationCenter.default.publisher(
+            for: NSApplication.didChangeScreenParametersNotification
+        )) { _ in
+            screenConfigurationRevision += 1
         }
     }
 
@@ -161,7 +170,10 @@ struct SettingsView: View {
     }
 
     private var displayTab: some View {
-        VStack(alignment: .leading, spacing: 0) {
+        // Dependency only: re-renders the display list, the Auto subtitle,
+        // and the notch gates below when the screen configuration changes.
+        _ = screenConfigurationRevision
+        return VStack(alignment: .leading, spacing: 0) {
             usageDisplaySection
             chartSection
             costStyleSection

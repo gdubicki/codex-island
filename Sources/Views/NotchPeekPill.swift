@@ -167,7 +167,8 @@ struct NotchPeekPill: View {
         Text(percentText)
             .font(Typography.bodyNumber)
             .minimumScaleFactor(0.5)
-            .frame(width: contents == .stacked && usage.isUnlimitedAmount ? valueWidth : nil,
+            .frame(width: (contents == .stacked || contents == .percentage) && usage.isUnlimitedAmount
+                       ? valueWidth : nil,
                    alignment: alignment == .leading ? .trailing : .leading)
             .foregroundStyle(effectiveTint)
             .help(usage.isUnlimitedAmount ? usage.amountCaption ?? "" : "")
