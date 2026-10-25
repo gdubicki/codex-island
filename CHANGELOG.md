@@ -10,8 +10,9 @@ tag was cut.
 
 - Hide the provider logos beside the notch on notched displays from
   **Settings → Display → Logos**. The island then shrinks to the notch at rest
-  and keeps only the color-coded usage readings when peeking or with
-  **Always show usage** on.
+  and keeps only the usage readings when peeking or with **Always show
+  usage** on. Those readings stay in each provider's color even past an alert
+  threshold; the warning glyph carries the severity.
 
 ## [0.3.0] - 2026-10-01
 

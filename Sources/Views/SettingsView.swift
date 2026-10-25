@@ -712,6 +712,8 @@ struct SettingsView: View {
                 SettingsToggle(isOn: logos.visible) {
                     logos.visible.toggle()
                 }
+                .accessibilityLabel(L10n.tr("Provider logos"))
+                .accessibilityValue(L10n.tr(logos.visible ? "On" : "Off"))
             }
         }
         .padding(.horizontal, 14)
