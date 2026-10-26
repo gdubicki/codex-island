@@ -15,20 +15,23 @@ enum UsageFetcher {
             return errorPair("no codex auth")
         }
         let accountID = codexAccountID(authData: authData)
-
-        do {
-            let (data, response) = try await send(req)
-            // auth.json can change while the request is in flight; the
-            // response then describes the old credential, not the current one.
+        // auth.json can change while the request is in flight; its outcome,
+        // success or failure, then describes the old credential.
+        func changedCredential() -> AppUsage? {
             // A missing or unusable snapshot (e.g. mid-rewrite) is no credential.
             guard let current = codexAuthData(credentialData()),
                   codexRequest(path: "usage", authData: current) != nil else { return errorPair("no codex auth") }
             // The token identifies a token-only credential; with an account,
             // a same-account CLI token rotation still describes this account.
-            if codexAccountID(authData: current) != accountID
-                || (accountID == nil && codexAccessToken(authData: current) != codexAccessToken(authData: authData)) {
-                return errorPair("codex credentials changed", accountID: codexAccountID(authData: current), accountResolved: true)
-            }
+            guard codexAccountID(authData: current) != accountID
+                || (accountID == nil && codexAccessToken(authData: current) != codexAccessToken(authData: authData))
+            else { return nil }
+            return errorPair("codex credentials changed", accountID: codexAccountID(authData: current), accountResolved: true)
+        }
+
+        do {
+            let (data, response) = try await send(req)
+            if let changed = changedCredential() { return changed }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
 
             // 401 means the access_token in ~/.codex/auth.json has expired.
@@ -55,6 +58,7 @@ enum UsageFetcher {
                 accountResolved: true
             )
         } catch {
+            if let changed = changedCredential() { return changed }
             return errorPair(error.localizedDescription, accountID: accountID, accountResolved: true)
         }
     }

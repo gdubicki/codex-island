@@ -140,10 +140,15 @@ struct EnterpriseUsageTests {
         expect(scopeA != PeekWindowStore.scope(.codex, usage: accountB) && scopeA != PeekWindowStore.scope(.claude, usage: accountA),
                "peek choices are scoped per provider account")
         expect(PeekWindowStore.scope(.codex, usage: .empty) == "codex", "a credential without an account keeps the provider-wide choice")
-        expect(!PeekWindowStore.scopeResolved(.codex, usage: .empty)
-                && PeekWindowStore.scopeResolved(.codex, usage: AppUsage(fiveHour: .unknown, weekly: .unknown, accountResolved: true))
+        let tokenOnlyUsage = AppUsage(fiveHour: .unknown, weekly: .unknown, accountResolved: true)
+        expect(!PeekWindowStore.scopeResolved(.codex, usage: .empty, local: tokenOnlyUsage)
+                && PeekWindowStore.scopeResolved(.codex, usage: tokenOnlyUsage, local: tokenOnlyUsage)
                 && PeekWindowStore.scopeResolved(.claude, usage: .empty),
                "the Codex choice waits for a resolved account, including a resolved token-only one")
+        expect(!PeekWindowStore.scopeResolved(.codex, usage: accountA, local: accountB)
+                && PeekWindowStore.scopeResolved(.codex, usage: accountA, local: accountA)
+                && !PeekWindowStore.scopeResolved(.codex, usage: accountA, local: nil),
+               "the Codex choice waits while cached usage describes an account switched away from")
         let peekStore = PeekWindowStore.shared
         let before = peekStore.window(for: .codex, usage: .empty)
         peekStore.set(before == .weekly ? .fiveHour : .weekly, for: .codex, usage: .empty)

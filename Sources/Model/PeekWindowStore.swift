@@ -32,8 +32,13 @@ final class PeekWindowStore: ObservableObject {
 
     /// Whether `scope` is final. Codex names its account only once a fetch
     /// reads the credential; until then a choice would land on the wrong key.
-    nonisolated static func scopeResolved(_ provider: IslandProvider, usage: AppUsage) -> Bool {
-        provider != .codex || usage.accountResolved
+    /// Also false while cached usage still describes an account the local
+    /// credential has since switched away from.
+    nonisolated static func scopeResolved(_ provider: IslandProvider, usage: AppUsage,
+                                          local: @autoclosure () -> AppUsage? = UsageFetcher.codexLocalIdentity()) -> Bool {
+        guard provider == .codex else { return true }
+        guard usage.accountResolved, let local = local() else { return false }
+        return local.accountID == usage.accountID
     }
 
     func window(for provider: IslandProvider, usage: AppUsage) -> UsageWindow {

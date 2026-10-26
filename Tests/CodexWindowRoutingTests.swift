@@ -155,6 +155,13 @@ struct CodexWindowRoutingTests {
         let rotated = await midFlight(from: auth, to: Data(#"{"tokens":{"access_token":"rotated-token","account_id":"selected-account"}}"#.utf8))
         expect(rotated.weekly.hasReading && rotated.accountID == "selected-account",
                "a same-account token rotation mid-flight still applies the response")
+        var thrownAuth = auth
+        let switchedThenThrew = await UsageFetcher.fetchCodex(credentialData: thrownAuth) { _ in
+            thrownAuth = switchedAuth
+            throw URLError(.timedOut)
+        }
+        expect(switchedThenThrew.accountID == "other-account" && switchedThenThrew.weekly.error == "codex credentials changed",
+               "a request that fails after an account switch is tagged with the new account")
         let identity = UsageFetcher.codexLocalIdentity(credentialData: auth)
         expect(identity?.accountID == "selected-account" && identity?.accountResolved == true && identity?.visibleWindows.isEmpty == true,
                "the local credential resolves the account before any request")
