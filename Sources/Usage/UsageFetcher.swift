@@ -23,8 +23,10 @@ enum UsageFetcher {
             // A missing or unusable snapshot (e.g. mid-rewrite) is no credential.
             guard let current = codexAuthData(credentialData()),
                   codexRequest(path: "usage", authData: current) != nil else { return errorPair("no codex auth") }
+            // The token identifies a token-only credential; with an account,
+            // a same-account CLI token rotation still describes this account.
             if codexAccountID(authData: current) != accountID
-                || codexAccessToken(authData: current) != codexAccessToken(authData: authData) {
+                || (accountID == nil && codexAccessToken(authData: current) != codexAccessToken(authData: authData)) {
                 return errorPair("codex credentials changed", accountID: codexAccountID(authData: current), accountResolved: true)
             }
             let status = (response as? HTTPURLResponse)?.statusCode ?? 0
@@ -83,6 +85,13 @@ enum UsageFetcher {
         guard let json = try? JSONSerialization.jsonObject(with: authData) as? [String: Any],
               let tokens = json["tokens"] as? [String: Any] else { return nil }
         return tokens["access_token"] as? String
+    }
+
+    /// Unfetched usage scoped to the local credential's account, so launch
+    /// seeding knows whose history it may show. nil without a usable credential.
+    static func codexLocalIdentity(credentialData: Data? = nil) -> AppUsage? {
+        guard let data = codexAuthData(credentialData), codexRequest(path: "usage", authData: data) != nil else { return nil }
+        return AppUsage(fiveHour: .unknown, weekly: .unknown, accountID: codexAccountID(authData: data), accountResolved: true)
     }
 
     static func codexAccountID(authData: Data) -> String? {

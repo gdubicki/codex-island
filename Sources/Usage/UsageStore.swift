@@ -253,6 +253,9 @@ final class UsageStore: ObservableObject {
     /// to "—" for the whole cooldown.
     private func seedFromHistory() {
         claude = UsageStore.seeded(claude, provider: .claude, fillUnreported: true)
+        // Resolve the account from the local credential (no request) first,
+        // so history recorded by another account isn't shown under this one.
+        if !codex.accountResolved, let identity = UsageFetcher.codexLocalIdentity() { codex = identity }
         codex = UsageStore.seeded(codex, provider: .codex, fillUnreported: true)
     }
 

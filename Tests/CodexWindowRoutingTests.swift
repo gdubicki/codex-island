@@ -152,6 +152,17 @@ struct CodexWindowRoutingTests {
                "a token-only credential replaced mid-flight does not apply the old token's response")
         expect((await midFlight(from: tokenOnlyOld, to: tokenOnlyOld)).weekly.hasReading,
                "an unchanged token-only credential still applies its response")
+        let rotated = await midFlight(from: auth, to: Data(#"{"tokens":{"access_token":"rotated-token","account_id":"selected-account"}}"#.utf8))
+        expect(rotated.weekly.hasReading && rotated.accountID == "selected-account",
+               "a same-account token rotation mid-flight still applies the response")
+        let identity = UsageFetcher.codexLocalIdentity(credentialData: auth)
+        expect(identity?.accountID == "selected-account" && identity?.accountResolved == true && identity?.visibleWindows.isEmpty == true,
+               "the local credential resolves the account before any request")
+        expect(UsageFetcher.codexLocalIdentity(credentialData: Data(#"{"tokens":{"access_token":"t"}}"#.utf8))
+                .map { $0.accountResolved && $0.accountID == nil } == true,
+               "a local token-only credential resolves to the provider-wide scope")
+        expect(UsageFetcher.codexLocalIdentity(credentialData: Data("not-json".utf8)) == nil,
+               "an unusable local credential leaves the account unresolved")
 
         var creditRequests: [URLRequest] = []
         let fetchedCredits = await UsageFetcher.fetchCodexResetCredits(credentialData: auth) { request in
